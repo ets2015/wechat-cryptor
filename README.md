@@ -22,7 +22,7 @@
 ```java
 public String decode(InputStream inputStream, String msgSignature, String timestamp, String nonce) throws IOException, AesException;
 ```
--加密
+- 加密
 ```java
  public String encode(String replyMsg) throws AesException;
 ```
