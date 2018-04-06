@@ -20,8 +20,9 @@ import java.util.UUID;
 @Slf4j
 public class WechatCryptor {
 
-
     private WXBizMsgCrypt wxBizMsgCrypt;
+
+    private static final int INITIAL_CRYPTOR_SIZE = 3;
 
     private WechatCryptor(String appid, String token, String encodingAesKey) throws AesException {
         this.wxBizMsgCrypt = new WXBizMsgCrypt(token, encodingAesKey, appid);
@@ -31,28 +32,34 @@ public class WechatCryptor {
     }
 
 
-    private static Map<String, WechatCryptor> cryptorMap;
+    private static Map<String, WechatCryptor> cryptorMap = new HashMap<>(INITIAL_CRYPTOR_SIZE);
 
     public static WechatCryptor get(String appid) {
-        if (cryptorMap == null) {
-            return null;
-        }
         return cryptorMap.get(appid);
     }
 
+    /**
+     * 如果不存在加解密器则构造加解密器
+     *
+     * @param appid
+     * @param token
+     * @param encodingAesKey
+     * @return
+     * @throws AesException
+     */
     public static WechatCryptor buildIfNotExists(String appid, String token, String encodingAesKey) throws AesException {
-        WechatCryptor wechatCryptor = get(appid);
-        if (wechatCryptor == null) {
-            return put(appid, token, encodingAesKey);
+        if (get(appid) == null) {
+            synchronized (WechatCryptor.class) {
+                if (get(appid) == null) {
+                    return put(appid, token, encodingAesKey);
+                }
+            }
         }
-        return wechatCryptor;
+        return get(appid);
     }
 
 
     public static WechatCryptor put(String appid, String token, String encodingAesKey) throws AesException {
-        if (cryptorMap == null) {
-            cryptorMap = new HashMap<>(5);
-        }
         WechatCryptor wechatCryptor = new WechatCryptor(appid, token, encodingAesKey);
         cryptorMap.put(appid, wechatCryptor);
         return wechatCryptor;
@@ -63,23 +70,29 @@ public class WechatCryptor {
      *
      * @return
      */
-    public String decode(InputStream inputStream, String msgSignature, String timestamp, String nonce) throws IOException, AesException {
-        StringBuffer sb = new StringBuffer();
-        InputStreamReader isr = new InputStreamReader(inputStream, "UTF-8");
-        BufferedReader br = new BufferedReader(isr);
-        String s;
-        while ((s = br.readLine()) != null) {
-            sb.append(s);
+    public String decode(InputStream inputStream, String msgSignature, String timestamp, String nonce) {
+        StringBuilder sb = new StringBuilder();
+        try (
+                InputStreamReader isr = new InputStreamReader(inputStream, "UTF-8");
+                BufferedReader br = new BufferedReader(isr)
+        ) {
+            String s;
+            while ((s = br.readLine()) != null) {
+                sb.append(s);
+            }
+            String content = sb.toString();
+            if (log.isDebugEnabled()) {
+                log.debug("input stream content => {}", content);
+            }
+            String decryptResult = this.wxBizMsgCrypt.decryptMsg(msgSignature, timestamp, nonce, content);
+            if (log.isDebugEnabled()) {
+                log.debug("decrypt result => {}", decryptResult);
+            }
+            return decryptResult;
+        } catch (IOException | AesException e) {
+            log.error(e.getLocalizedMessage(), e);
         }
-        String content = sb.toString();
-        if (log.isDebugEnabled()) {
-            log.debug("input stream content => {}", content);
-        }
-        String decryptResult = this.wxBizMsgCrypt.decryptMsg(msgSignature, timestamp, nonce, content);
-        if (log.isDebugEnabled()) {
-            log.debug("decrypt result => {}", decryptResult);
-        }
-        return decryptResult;
+        return null;
     }
 
     /**
@@ -88,15 +101,20 @@ public class WechatCryptor {
      * @param replyMsg
      * @return
      */
-    public String encode(String replyMsg) throws AesException {
+    public String encode(String replyMsg) {
         if (log.isDebugEnabled()) {
             log.debug("encode reply message => {}", replyMsg);
         }
-        String cryptoReplyMsg = this.wxBizMsgCrypt.encryptMsg(replyMsg, String.valueOf(System.currentTimeMillis()), UUID.randomUUID().toString().replace("-", ""));
-        if (log.isDebugEnabled()) {
-            log.debug("crypto reply message => {}", cryptoReplyMsg);
+        try {
+            String cryptoReplyMsg = this.wxBizMsgCrypt.encryptMsg(replyMsg, String.valueOf(System.currentTimeMillis()), UUID.randomUUID().toString().replace("-", ""));
+            if (log.isDebugEnabled()) {
+                log.debug("crypto reply message => {}", cryptoReplyMsg);
+            }
+            return cryptoReplyMsg;
+        } catch (AesException e) {
+            log.error(e.getLocalizedMessage(), e);
         }
-        return cryptoReplyMsg;
+        return null;
     }
 
 }
