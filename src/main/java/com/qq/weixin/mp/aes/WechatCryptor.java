@@ -1,6 +1,8 @@
 package com.qq.weixin.mp.aes;
 
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,9 +13,11 @@ import java.util.UUID;
 
 /**
  * 微信消息解密
- *  @author Shinez.
+ *
+ * @author Shinez.
  */
 
+@Slf4j
 public class WechatCryptor {
 
 
@@ -38,8 +42,8 @@ public class WechatCryptor {
 
     public static WechatCryptor buildIfNotExists(String appid, String token, String encodingAesKey) throws AesException {
         WechatCryptor wechatCryptor = get(appid);
-        if(wechatCryptor==null){
-            return put(appid,token,encodingAesKey);
+        if (wechatCryptor == null) {
+            return put(appid, token, encodingAesKey);
         }
         return wechatCryptor;
     }
@@ -67,9 +71,14 @@ public class WechatCryptor {
         while ((s = br.readLine()) != null) {
             sb.append(s);
         }
-        String str = sb.toString();
-
-        String decryptResult = this.wxBizMsgCrypt.decryptMsg(msgSignature, timestamp, nonce, sb.toString());;
+        String content = sb.toString();
+        if (log.isDebugEnabled()) {
+            log.debug("input stream content => {}", content);
+        }
+        String decryptResult = this.wxBizMsgCrypt.decryptMsg(msgSignature, timestamp, nonce, content);
+        if (log.isDebugEnabled()) {
+            log.debug("decrypt result => {}", decryptResult);
+        }
         return decryptResult;
     }
 
@@ -80,7 +89,14 @@ public class WechatCryptor {
      * @return
      */
     public String encode(String replyMsg) throws AesException {
+        if (log.isDebugEnabled()) {
+            log.debug("encode reply message => {}", replyMsg);
+        }
         String cryptoReplyMsg = this.wxBizMsgCrypt.encryptMsg(replyMsg, String.valueOf(System.currentTimeMillis()), UUID.randomUUID().toString().replace("-", ""));
+        if (log.isDebugEnabled()) {
+            log.debug("crypto reply message => {}", cryptoReplyMsg);
+        }
         return cryptoReplyMsg;
     }
+
 }
